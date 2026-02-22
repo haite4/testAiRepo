@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { getChannels, addChannel, deleteChannel, sendPost } from '../services/api';
+import { getChannels, addChannel, updateChannel, deleteChannel, sendPost } from '../services/api';
 
 export default function Dashboard() {
   const [channels, setChannels] = useState([]);
@@ -12,6 +12,10 @@ export default function Dashboard() {
   const [sending, setSending] = useState(false);
   const [addLoading, setAddLoading] = useState(false);
   const [formError, setFormError] = useState('');
+  const [editingId, setEditingId] = useState(null);
+  const [editForm, setEditForm] = useState({ name: '', channel_id: '', bot_token: '' });
+  const [editLoading, setEditLoading] = useState(false);
+  const [editError, setEditError] = useState('');
   const navigate = useNavigate();
   const username = localStorage.getItem('username');
 
@@ -46,6 +50,35 @@ export default function Dashboard() {
       setChannels(cs => cs.filter(c => c.id !== id));
       setSelectedIds(sel => sel.filter(s => s !== id));
     } catch { /* silently fail */ }
+  }
+
+  function handleEditClick(e, ch) {
+    e.stopPropagation();
+    setEditingId(ch.id);
+    setEditForm({ name: ch.name, channel_id: ch.channel_id, bot_token: '' });
+    setEditError('');
+  }
+
+  function handleEditCancel(e) {
+    e.stopPropagation();
+    setEditingId(null);
+    setEditError('');
+  }
+
+  async function handleEditSubmit(e, id) {
+    e.preventDefault();
+    e.stopPropagation();
+    setEditLoading(true);
+    setEditError('');
+    try {
+      const { data } = await updateChannel(id, editForm);
+      setChannels(cs => cs.map(c => c.id === id ? { ...c, name: data.name, channel_id: data.channel_id } : c));
+      setEditingId(null);
+    } catch (err) {
+      setEditError(err.response?.data?.error || 'Failed to update channel');
+    } finally {
+      setEditLoading(false);
+    }
   }
 
   function toggleChannel(id) {
@@ -186,39 +219,117 @@ export default function Dashboard() {
                 <ul className="space-y-1.5">
                   {channels.map(ch => {
                     const selected = selectedIds.includes(ch.id);
+                    const isEditing = editingId === ch.id;
                     return (
-                      <li
-                        key={ch.id}
-                        onClick={() => toggleChannel(ch.id)}
-                        className={`flex items-center gap-3 px-3 py-2.5 rounded-lg border cursor-pointer transition-all select-none ${
-                          selected
-                            ? 'border-blue-300 bg-blue-50'
-                            : 'border-transparent hover:bg-gray-50'
-                        }`}
-                      >
-                        {/* Checkbox */}
-                        <div className={`w-4 h-4 rounded border-2 flex-shrink-0 flex items-center justify-center transition-colors ${
-                          selected ? 'bg-blue-500 border-blue-500' : 'border-gray-300'
-                        }`}>
-                          {selected && (
-                            <svg className="w-2.5 h-2.5 text-white" viewBox="0 0 10 10" fill="none">
-                              <path d="M1.5 5L4 7.5L8.5 2.5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
-                            </svg>
+                      <li key={ch.id} className="rounded-lg overflow-hidden">
+                        <div
+                          onClick={() => !isEditing && toggleChannel(ch.id)}
+                          className={`flex items-center gap-3 px-3 py-2.5 border transition-all select-none ${
+                            isEditing
+                              ? 'border-blue-300 bg-blue-50 rounded-t-lg cursor-default'
+                              : selected
+                              ? 'border-blue-300 bg-blue-50 rounded-lg cursor-pointer'
+                              : 'border-transparent hover:bg-gray-50 rounded-lg cursor-pointer'
+                          }`}
+                        >
+                          {/* Checkbox */}
+                          <div className={`w-4 h-4 rounded border-2 flex-shrink-0 flex items-center justify-center transition-colors ${
+                            selected ? 'bg-blue-500 border-blue-500' : 'border-gray-300'
+                          }`}>
+                            {selected && (
+                              <svg className="w-2.5 h-2.5 text-white" viewBox="0 0 10 10" fill="none">
+                                <path d="M1.5 5L4 7.5L8.5 2.5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+                              </svg>
+                            )}
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <p className="text-sm font-medium text-gray-800 truncate">{ch.name}</p>
+                            <p className="text-xs text-gray-400 truncate">{ch.channel_id}</p>
+                          </div>
+                          <button
+                            onClick={e => isEditing ? handleEditCancel(e) : handleEditClick(e, ch)}
+                            className="text-gray-300 hover:text-blue-400 transition-colors p-0.5 flex-shrink-0"
+                            title={isEditing ? 'Cancel edit' : 'Edit'}
+                          >
+                            {isEditing ? (
+                              <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                                <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+                              </svg>
+                            ) : (
+                              <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                                <path strokeLinecap="round" strokeLinejoin="round" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                              </svg>
+                            )}
+                          </button>
+                          {!isEditing && (
+                            <button
+                              onClick={e => { e.stopPropagation(); handleDelete(ch.id); }}
+                              className="text-gray-300 hover:text-red-400 transition-colors p-0.5 flex-shrink-0"
+                              title="Remove"
+                            >
+                              <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                                <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+                              </svg>
+                            </button>
                           )}
                         </div>
-                        <div className="flex-1 min-w-0">
-                          <p className="text-sm font-medium text-gray-800 truncate">{ch.name}</p>
-                          <p className="text-xs text-gray-400 truncate">{ch.channel_id}</p>
-                        </div>
-                        <button
-                          onClick={e => { e.stopPropagation(); handleDelete(ch.id); }}
-                          className="text-gray-300 hover:text-red-400 transition-colors p-0.5 flex-shrink-0"
-                          title="Remove"
-                        >
-                          <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                            <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
-                          </svg>
-                        </button>
+
+                        {/* Inline edit form */}
+                        {isEditing && (
+                          <form
+                            onSubmit={e => handleEditSubmit(e, ch.id)}
+                            onClick={e => e.stopPropagation()}
+                            className="p-3 space-y-2 bg-gray-50 border border-t-0 border-blue-300 rounded-b-lg"
+                          >
+                            <div>
+                              <label className="block text-xs font-medium text-gray-600 mb-1">Display name</label>
+                              <input
+                                value={editForm.name}
+                                onChange={e => setEditForm(f => ({ ...f, name: e.target.value }))}
+                                placeholder="e.g. My News Channel"
+                                className="w-full px-3 py-1.5 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                                required
+                              />
+                            </div>
+                            <div>
+                              <label className="block text-xs font-medium text-gray-600 mb-1">Channel ID or @username</label>
+                              <input
+                                value={editForm.channel_id}
+                                onChange={e => setEditForm(f => ({ ...f, channel_id: e.target.value }))}
+                                placeholder="@mychannel or -1001234567890"
+                                className="w-full px-3 py-1.5 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                                required
+                              />
+                            </div>
+                            <div>
+                              <label className="block text-xs font-medium text-gray-600 mb-1">Bot token</label>
+                              <input
+                                value={editForm.bot_token}
+                                onChange={e => setEditForm(f => ({ ...f, bot_token: e.target.value }))}
+                                placeholder="Leave blank to keep existing token"
+                                type="password"
+                                className="w-full px-3 py-1.5 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                              />
+                            </div>
+                            {editError && <p className="text-xs text-red-500">{editError}</p>}
+                            <div className="flex gap-2">
+                              <button
+                                type="submit"
+                                disabled={editLoading}
+                                className="flex-1 text-sm bg-blue-600 text-white py-1.5 rounded-lg hover:bg-blue-700 disabled:opacity-50 transition-colors font-medium"
+                              >
+                                {editLoading ? 'Saving...' : 'Save Changes'}
+                              </button>
+                              <button
+                                type="button"
+                                onClick={e => handleEditCancel(e)}
+                                className="flex-1 text-sm bg-gray-100 text-gray-600 py-1.5 rounded-lg hover:bg-gray-200 transition-colors font-medium"
+                              >
+                                Cancel
+                              </button>
+                            </div>
+                          </form>
+                        )}
                       </li>
                     );
                   })}
