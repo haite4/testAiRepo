@@ -25,6 +25,28 @@ router.post('/', (req, res) => {
   res.json({ id: result.lastInsertRowid, name, channel_id });
 });
 
+// Edit a channel
+router.put('/:id', (req, res) => {
+  const { name, channel_id, bot_token } = req.body;
+  if (!name || !channel_id) {
+    return res.status(400).json({ error: 'name and channel_id are required' });
+  }
+  const existing = db
+    .prepare('SELECT id FROM channels WHERE id = ? AND user_id = ?')
+    .get(req.params.id, req.userId);
+  if (!existing) {
+    return res.status(404).json({ error: 'Channel not found' });
+  }
+  if (bot_token) {
+    db.prepare('UPDATE channels SET name = ?, channel_id = ?, bot_token = ? WHERE id = ? AND user_id = ?')
+      .run(name, channel_id, bot_token, req.params.id, req.userId);
+  } else {
+    db.prepare('UPDATE channels SET name = ?, channel_id = ? WHERE id = ? AND user_id = ?')
+      .run(name, channel_id, req.params.id, req.userId);
+  }
+  res.json({ id: Number(req.params.id), name, channel_id });
+});
+
 // Delete a channel
 router.delete('/:id', (req, res) => {
   db.prepare('DELETE FROM channels WHERE id = ? AND user_id = ?').run(req.params.id, req.userId);

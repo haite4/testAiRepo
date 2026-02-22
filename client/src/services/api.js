@@ -16,6 +16,7 @@ export const register = (username, password) =>
 
 export const getChannels = () => api.get('/channels');
 export const addChannel = data => api.post('/channels', data);
+export const updateChannel = (id, data) => api.put(`/channels/${id}`, data);
 export const deleteChannel = id => api.delete(`/channels/${id}`);
 
 export const sendPost = (message, channelIds) =>
